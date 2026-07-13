@@ -1,0 +1,434 @@
+import { useLanguage } from "@/contexts/LanguageContext";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Link } from "wouter";
+import { Activity, Globe, Shield, Video, Play, Headphones, Clock, ArrowRight, TrendingUp, CheckCircle, Star, Zap, Gift } from "lucide-react";
+import { trpc } from "@/lib/trpc";
+import { getThumbnailUrl } from "@/lib/videoUtils";
+import { SEO, OrganizationSchema, MedicalServiceSchema, WebsiteSchema } from "@/components/SEO";
+
+export default function Home() {
+  const { t, language } = useLanguage();
+  const { data: videos } = trpc.media.videos.useQuery();
+  const { data: podcasts } = trpc.media.podcasts.useQuery();
+
+  // Get latest 3 videos and 3 podcasts
+  const latestVideos = videos?.slice(0, 3) || [];
+  const latestPodcasts = podcasts?.slice(0, 3) || [];
+
+  // Get most popular media (combine videos and podcasts, sort by views, take top 6)
+  const allMedia = [
+    ...(videos?.map(v => ({ ...v, type: 'video' as const })) || []),
+    ...(podcasts?.map(p => ({ ...p, type: 'podcast' as const })) || [])
+  ];
+  const mostPopular = allMedia
+    .sort((a, b) => b.views - a.views)
+    .slice(0, 6);
+
+  const features = [
+    {
+      icon: Activity,
+      title: t("feature1Title"),
+      description: t("feature1Desc"),
+    },
+    {
+      icon: Globe,
+      title: t("feature2Title"),
+      description: t("feature2Desc"),
+    },
+    {
+      icon: Shield,
+      title: t("feature3Title"),
+      description: t("feature3Desc"),
+    },
+    {
+      icon: Video,
+      title: t("feature4Title"),
+      description: t("feature4Desc"),
+    },
+  ];
+
+  return (
+    <>
+      <SEO />
+      <OrganizationSchema />
+      <MedicalServiceSchema />
+      <WebsiteSchema />
+      <div className="min-h-screen">
+      {/* Hero Section */}
+      <section className="relative bg-gradient-to-br from-primary/10 via-background to-primary/5 py-20 md:py-32">
+        <div className="container">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <div className="space-y-6">
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight">
+                {t("heroTitle")}
+              </h1>
+              <p className="text-xl text-muted-foreground">
+                {t("heroSubtitle")}
+              </p>
+              <p className="text-lg text-muted-foreground">
+                {t("heroDescription")}
+              </p>
+              <div className="flex flex-wrap gap-4">
+                <Button size="lg" asChild>
+                  <Link href="/consultations">{t("bookConsultation")}</Link>
+                </Button>
+                <Button size="lg" variant="outline" asChild>
+                  <Link href="/videos">{t("learnMore")}</Link>
+                </Button>
+              </div>
+            </div>
+            <div className="flex justify-center">
+              <img
+                src="/logo.jpeg"
+                alt={t("siteName")}
+                className="w-full max-w-md rounded-2xl shadow-2xl"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section className="py-20 bg-background">
+        <div className="container">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">{t("features")}</h2>
+            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+              {t("heroDescription")}
+            </p>
+          </div>
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {features.map((feature, index) => (
+              <Card key={index} className="border-2 hover:border-primary/50 transition-colors">
+                <CardHeader>
+                  <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                    <feature.icon className="w-6 h-6 text-primary" />
+                  </div>
+                  <CardTitle>{feature.title}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <CardDescription className="text-base">
+                    {feature.description}
+                  </CardDescription>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Latest Videos & Podcasts Section */}
+      <section className="py-20 bg-muted/30">
+        <div className="container">
+          {/* Latest Videos */}
+          <div className="mb-16">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h2 className="text-3xl md:text-4xl font-bold mb-2">
+                  {language === "en" ? "Latest Videos" : "أحدث الفيديوهات"}
+                </h2>
+                <p className="text-muted-foreground">
+                  {language === "en" 
+                    ? "Explore our newest educational medical content"
+                    : "استكشف أحدث المحتوى الطبي التعليمي"}
+                </p>
+              </div>
+              <Button variant="outline" asChild>
+                <Link href="/videos">
+                  {language === "en" ? "View All" : "عرض الكل"}
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Link>
+              </Button>
+            </div>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {latestVideos.map((video) => (
+                <Link key={video.id} href="/videos">
+                  <Card className="overflow-hidden hover:shadow-lg transition-all hover:scale-[1.02] cursor-pointer h-full">
+                    <div className="relative aspect-video bg-gradient-to-br from-primary/20 to-primary/5">
+                      {video.thumbnailUrl ? (
+                      <img
+                        src={getThumbnailUrl(video.videoUrl, video.thumbnailUrl)}
+                        alt={language === "en" ? video.titleEn : video.titleAr}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.src = '/placeholder-video.jpg';
+                        }}
+                      />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Play className="w-16 h-16 text-primary" />
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                        <Play className="w-12 h-12 text-white" />
+                      </div>
+                    </div>
+                    <CardHeader>
+                      <CardTitle className="line-clamp-2">
+                        {language === "en" ? video.titleEn : video.titleAr}
+                      </CardTitle>
+                      <CardDescription className="flex items-center gap-4 text-sm">
+                        {video.duration && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-4 h-4" />
+                            {Math.floor(video.duration / 60)} {language === "en" ? "min" : "دقيقة"}
+                          </span>
+                        )}
+                        <span className="flex items-center gap-1">
+                          <Video className="w-4 h-4" />
+                          {video.views} {language === "en" ? "views" : "مشاهدة"}
+                        </span>
+                      </CardDescription>
+                    </CardHeader>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          {/* Latest Podcasts */}
+          <div>
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h2 className="text-3xl md:text-4xl font-bold mb-2">
+                  {language === "en" ? "Latest Podcasts" : "أحدث البودكاست"}
+                </h2>
+                <p className="text-muted-foreground">
+                  {language === "en" 
+                    ? "Listen to expert medical discussions and insights"
+                    : "استمع إلى المناقشات والرؤى الطبية من الخبراء"}
+                </p>
+              </div>
+              <Button variant="outline" asChild>
+                <Link href="/podcasts">
+                  {language === "en" ? "View All" : "عرض الكل"}
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Link>
+              </Button>
+            </div>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {latestPodcasts.map((podcast) => (
+                <Link key={podcast.id} href="/podcasts">
+                  <Card className="overflow-hidden hover:shadow-lg transition-all hover:scale-[1.02] cursor-pointer h-full">
+                    <div className="relative aspect-video bg-gradient-to-br from-primary/20 to-primary/5">
+                      {podcast.thumbnailUrl ? (
+                        <img
+                          src={podcast.thumbnailUrl}
+                          alt={language === "en" ? podcast.titleEn : podcast.titleAr}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Headphones className="w-16 h-16 text-primary" />
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                        <Headphones className="w-12 h-12 text-white" />
+                      </div>
+                    </div>
+                    <CardHeader>
+                      <CardTitle className="line-clamp-2">
+                        {language === "en" ? podcast.titleEn : podcast.titleAr}
+                      </CardTitle>
+                      <CardDescription className="flex items-center gap-4 text-sm">
+                        {podcast.duration && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-4 h-4" />
+                            {Math.floor(podcast.duration / 60)} {language === "en" ? "min" : "دقيقة"}
+                          </span>
+                        )}
+                        <span className="flex items-center gap-1">
+                          <Headphones className="w-4 h-4" />
+                          {podcast.views} {language === "en" ? "listens" : "استماع"}
+                        </span>
+                      </CardDescription>
+                    </CardHeader>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Most Popular Section */}
+      <section className="py-20 bg-background">
+        <div className="container">
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-2 rounded-full mb-4">
+              <TrendingUp className="w-5 h-5" />
+              <span className="font-semibold">
+                {language === "en" ? "Most Popular" : "الأكثر شعبية"}
+              </span>
+            </div>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">
+              {language === "en" 
+                ? "Trending Medical Content" 
+                : "المحتوى الطبي الأكثر مشاهدة"}
+            </h2>
+            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+              {language === "en" 
+                ? "Discover our most viewed educational content trusted by thousands"
+                : "اكتشف المحتوى التعليمي الأكثر مشاهدة والموثوق به من قبل الآلاف"}
+            </p>
+          </div>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {mostPopular.map((item) => {
+              const isVideo = item.type === 'video';
+              const title = language === "en" ? item.titleEn : item.titleAr;
+              const linkPath = isVideo ? "/videos" : "/podcasts";
+
+              return (
+                <Link key={`${item.type}-${item.id}`} href={linkPath}>
+                  <Card className="overflow-hidden hover:shadow-xl transition-all hover:scale-[1.03] cursor-pointer h-full border-2 hover:border-primary/50">
+                    <div className="relative aspect-video bg-gradient-to-br from-primary/20 to-primary/5">
+                      {item.thumbnailUrl ? (
+                        <img
+                          src={item.thumbnailUrl}
+                          alt={title}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          {isVideo ? (
+                            <Play className="w-16 h-16 text-primary" />
+                          ) : (
+                            <Headphones className="w-16 h-16 text-primary" />
+                          )}
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                        {isVideo ? (
+                          <Play className="w-12 h-12 text-white" />
+                        ) : (
+                          <Headphones className="w-12 h-12 text-white" />
+                        )}
+                      </div>
+                      {/* Trending badge */}
+                      <div className="absolute top-3 right-3 bg-primary text-primary-foreground px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1">
+                        <TrendingUp className="w-3 h-3" />
+                        {item.views.toLocaleString()}
+                      </div>
+                    </div>
+                    <CardHeader>
+                      <CardTitle className="line-clamp-2 flex items-start gap-2">
+                        {isVideo ? (
+                          <Video className="w-5 h-5 text-primary flex-shrink-0 mt-1" />
+                        ) : (
+                          <Headphones className="w-5 h-5 text-primary flex-shrink-0 mt-1" />
+                        )}
+                        <span>{title}</span>
+                      </CardTitle>
+                      <CardDescription className="flex items-center gap-4 text-sm">
+                        {item.duration && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-4 h-4" />
+                            {Math.floor(item.duration / 60)} {language === "en" ? "min" : "دقيقة"}
+                          </span>
+                        )}
+                      </CardDescription>
+                    </CardHeader>
+                  </Card>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Registration Plans Section ─────────────────────────────── */}
+      <section className="py-20 bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-blue-950/30">
+        <div className="container">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">
+              {language === "ar" ? "ابدأ رحلتك الصحية اليوم" : "Start Your Health Journey Today"}
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              {language === "ar"
+                ? "اختر الخطة المناسبة لك واحصل على استشارة طبية ذكية مدعومة بالذكاء الاصطناعي"
+                : "Choose the plan that suits you and get an AI-powered smart medical consultation"}
+            </p>
+          </div>
+
+          <div className="flex justify-center max-w-4xl mx-auto">
+
+            {/* ── Single Plan ── */}
+            <div className="relative rounded-2xl border-2 border-blue-500 bg-white dark:bg-slate-900 p-8 flex flex-col gap-6 shadow-lg max-w-md mx-auto w-full">
+              {/* Free badge */}
+              <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+                <span className="inline-flex items-center gap-1 bg-green-500 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow">
+                  <Gift className="w-3 h-3" />
+                  {language === "ar" ? "مجاني للتسجيل" : "Free to Register"}
+                </span>
+              </div>
+
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Zap className="w-5 h-5 text-blue-500" />
+                  <span className="text-sm font-semibold uppercase tracking-wide text-blue-500">
+                    {language === "ar" ? "خطة الاستشارة" : "Consultation Plan"}
+                  </span>
+                </div>
+                <div className="flex items-end gap-2 mb-1">
+                  <span className="text-5xl font-extrabold">$0</span>
+                  <span className="text-muted-foreground mb-2 text-sm">
+                    {language === "ar" ? "للتسجيل" : "to register"}
+                  </span>
+                </div>
+                <p className="text-muted-foreground text-sm">
+                  {language === "ar" ? "استشارة أولى مجانية — ثم 5$ لكل استشارة" : "First consultation free — then $5 each"}
+                </p>
+              </div>
+
+              <ul className="space-y-3 flex-1">
+                {[
+                  language === "ar" ? "استشارة طبية مجانية واحدة عند التسجيل" : "1 free medical consultation on signup",
+                  language === "ar" ? "تحليل بالذكاء الاصطناعي" : "AI-powered analysis",
+                  language === "ar" ? "تقرير طبي + إنفوجرافيك + شرائح" : "Medical report + infographic + slides",
+                  language === "ar" ? "مراجعة من متخصص" : "Specialist review",
+                  language === "ar" ? "ملف طبي شخصي" : "Personal medical profile",
+                  language === "ar" ? "كل استشارة إضافية بـ 5$ فقط" : "Each additional consultation only $5",
+                ].map((item, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm">
+                    <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <Button size="lg" className="w-full bg-blue-500 hover:bg-blue-600 text-white" asChild>
+                <Link href="/register">
+                  {language === "ar" ? "سجّل مجاناً الآن" : "Register for Free Now"}
+                </Link>
+              </Button>
+            </div>
+          </div>
+
+          {/* Comparison note */}
+          <p className="text-center text-sm text-muted-foreground mt-8">
+            {language === "ar"
+              ? "بعد استنفاد الاستشارات المجانية، تُحتسب كل استشارة إضافية بـ 5$ فقط."
+              : "After your free consultations are used, each additional consultation is only $5."}
+          </p>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="py-20 bg-primary/5">
+        <div className="container">
+          <div className="max-w-3xl mx-auto text-center space-y-6">
+            <h2 className="text-3xl md:text-4xl font-bold">{t("consultationTitle")}</h2>
+            <p className="text-xl text-muted-foreground">
+              {t("heroSubtitle")}
+            </p>
+            <Button size="lg" asChild>
+              <Link href="/consultations">{t("getStarted")}</Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+    </div>
+    </>
+  );
+}
