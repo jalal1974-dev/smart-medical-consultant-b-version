@@ -1,0 +1,55 @@
+# Render Blueprint — deploy with "New + → Blueprint" at https://dashboard.render.com
+# Free plan note: the service sleeps after 15 min of inactivity and takes ~1 min
+# to wake on the next request. Fine for testing; upgrade or move to a VPS for launch.
+services:
+  - type: web
+    name: smc-b
+    runtime: node
+    plan: free
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
+    startCommand: pnpm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: VITE_APP_ID
+        value: smc-independent
+      - key: JWT_SECRET
+        generateValue: true # Render generates a secure random value
+      # Fill these in the Render dashboard when prompted:
+      - key: APP_URL
+        sync: false # e.g. https://smc-b.onrender.com
+      - key: VITE_APP_URL
+        sync: false # same as APP_URL
+      - key: DATABASE_URL
+        sync: false # mysql://user:pass@host:port/db  (Aiven free MySQL)
+      - key: LLM_API_URL
+        value: https://openrouter.ai/api
+      - key: LLM_API_KEY
+        sync: false # from https://openrouter.ai/keys
+      - key: LLM_MODEL
+        value: google/gemini-2.5-flash
+      - key: TRANSCRIPTION_API_URL
+        value: https://api.groq.com/openai
+      - key: TRANSCRIPTION_API_KEY
+        sync: false # from https://console.groq.com/keys (free)
+      - key: TRANSCRIPTION_MODEL
+        value: whisper-large-v3
+      - key: STORAGE_ENDPOINT
+        sync: false # https://<accountid>.r2.cloudflarestorage.com
+      - key: STORAGE_BUCKET
+        value: smc-files
+      - key: STORAGE_ACCESS_KEY_ID
+        sync: false
+      - key: STORAGE_SECRET_ACCESS_KEY
+        sync: false
+      - key: STORAGE_REGION
+        value: auto
+      - key: STORAGE_PUBLIC_URL
+        sync: false # https://pub-xxxx.r2.dev
+      - key: RESEND_API_KEY
+        sync: false # from https://resend.com/api-keys
+      - key: EMAIL_FROM
+        value: Smart Medical Consultant <onboarding@resend.dev>
+      - key: OWNER_EMAIL
+        value: jalalkhashman1974@gmail.com
