@@ -284,6 +284,10 @@ class SDKServer {
       console.warn("[Auth] Failed to update lastSignedIn:", err)
     );
 
+    // Never expose the bcrypt hash to request handlers / the client
+    // (auth.me returns this object verbatim).
+    (user as { passwordHash?: string | null }).passwordHash = null;
+
     return user;
   }
 }
