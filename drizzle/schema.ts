@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean } from "drizzle-orm/mysql-core";
+import { bigint, int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -8,6 +8,10 @@ export const users = mysqlTable("users", {
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
+  // Local username/password auth (previously added via direct SQL migration)
+  username: varchar("username", { length: 50 }).unique(),
+  passwordHash: varchar("password_hash", { length: 255 }),
+  authMethod: varchar("auth_method", { length: 20 }).default("oauth"),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
   hasUsedFreeConsultation: boolean("hasUsedFreeConsultation").default(false).notNull(),
@@ -448,8 +452,8 @@ export const passwordResetTokens = mysqlTable("password_reset_tokens", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("user_id").notNull(),
   token: varchar("token", { length: 128 }).notNull().unique(),
-  expiresAt: int("expires_at").notNull(), // Unix timestamp ms
-  usedAt: int("used_at"), // Unix timestamp ms, null if not used
+  expiresAt: bigint("expires_at", { mode: "number" }).notNull(), // Unix timestamp ms
+  usedAt: bigint("used_at", { mode: "number" }), // Unix timestamp ms, null if not used
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
@@ -467,8 +471,8 @@ export const uploadTokens = mysqlTable("upload_tokens", {
   reportType: mysqlEnum("report_type", ["infographic", "slides", "pdf", "mindmap", "pptx"]).notNull(),
   createdByAdminId: int("created_by_admin_id").notNull(),
   createdByAdminName: varchar("created_by_admin_name", { length: 255 }).notNull(),
-  expiresAt: int("expires_at").notNull(), // Unix timestamp ms
-  usedAt: int("used_at"),                  // null = not yet used
+  expiresAt: bigint("expires_at", { mode: "number" }).notNull(), // Unix timestamp ms
+  usedAt: bigint("used_at", { mode: "number" }),  // null = not yet used
   uploadedFileUrl: varchar("uploaded_file_url", { length: 500 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
