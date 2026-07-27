@@ -7,12 +7,12 @@ patchedDependencies:
 overrides:
   tailwindcss>nanoid: 3.3.7
 
-onlyBuiltDependencies:
-  - "@tailwindcss/oxide"
-  - esbuild
-  - puppeteer
-
+# esbuild's own postinstall only validates/chmods its cached native binary;
+# on Hostinger's build sandbox that spawn fails with EACCES (permission
+# issue in their build container, not a broken binary). The actual binary
+# ships via the @esbuild/<platform> optional dependency, which installs as
+# a normal package file (not a script) and is unaffected by declining here.
 allowBuilds:
-  '@tailwindcss/oxide': true
-  esbuild: true
+  "@tailwindcss/oxide": true
+  esbuild: false
   puppeteer: true
