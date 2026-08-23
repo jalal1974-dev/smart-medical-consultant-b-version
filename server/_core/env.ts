@@ -60,6 +60,17 @@ export const ENV = {
   emailFrom:      optionalEnv("EMAIL_FROM", "Smart Medical Consultant <onboarding@resend.dev>"),
   ownerEmail:     optionalEnv("OWNER_EMAIL"),
 
+  // ── LiveAvatar (HeyGen) — interactive video avatar for the intake session ──
+  //    Optional: when liveAvatarApiKey is empty the intake page silently falls
+  //    back to the browser text-to-speech avatar, so the site keeps working.
+  //    API key: https://app.liveavatar.com  →  Settings → API keys
+  liveAvatarApiKey:   optionalEnv("LIVEAVATAR_API_KEY"),
+  liveAvatarId:       optionalEnv("LIVEAVATAR_AVATAR_ID"),
+  liveAvatarVoiceId:  optionalEnv("LIVEAVATAR_VOICE_ID"),
+  liveAvatarApiUrl:   optionalEnv("LIVEAVATAR_API_URL", "https://api.liveavatar.com"),
+  // Sandbox sessions are free/watermarked — keep true until the plan is live.
+  liveAvatarSandbox:  optionalEnv("LIVEAVATAR_SANDBOX", "true") === "true",
+
   // ── Optional ───────────────────────────────────────────────────────────────
   oAuthServerUrl: optionalEnv("OAUTH_SERVER_URL"),
   appId:          optionalEnv("VITE_APP_ID", "smc-independent"),

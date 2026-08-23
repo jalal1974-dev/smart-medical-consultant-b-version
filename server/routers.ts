@@ -3142,7 +3142,59 @@ export const appRouter = router({
         if (ctx.user.role !== 'admin' && consultation.userId !== ctx.user.id) {
           throw new TRPCError({ code: 'FORBIDDEN' });
         }
+        // An admin reviewing a case must see the *patient's* session, not their
+        // own (which never exists) — look it up by consultation in that case.
+        if (ctx.user.role === 'admin' && consultation.userId !== ctx.user.id) {
+          return db.getAvatarSessionByConsultation(input.consultationId);
+        }
         return db.getAvatarSession(input.consultationId, ctx.user.id);
+      }),
+
+    // Doctor-facing: the intake transcript the patient gave the avatar.
+    // Admin-only, keyed by consultation so it always resolves the patient's row.
+    getTranscriptForReview: adminProcedure
+      .input(z.object({ consultationId: z.number() }))
+      .query(async ({ input }) => {
+        const session = await db.getAvatarSessionByConsultation(input.consultationId);
+        if (!session) return { messages: [], updatedAt: null };
+        let messages: Array<{ role: string; content: string; timestamp?: number }> = [];
+        try {
+          const parsed = JSON.parse(session.transcript || '[]');
+          if (Array.isArray(parsed)) messages = parsed;
+        } catch { /* malformed transcript — surface as empty rather than crashing review */ }
+        return { messages, updatedAt: (session as any).updatedAt ?? null };
+      }),
+
+    // Mint a short-lived LiveAvatar session token for the interactive video
+    // avatar. The API key stays on the server; the browser only ever sees this
+    // per-session token. Returns configured:false when LiveAvatar is not set up,
+    // so the client can fall back to the browser text-to-speech avatar.
+    getStreamingToken: protectedProcedure
+      .input(z.object({
+        consultationId: z.number(),
+        language: z.enum(['en', 'ar']).default('en'),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const consultation = await db.getConsultationById(input.consultationId);
+        if (!consultation) throw new TRPCError({ code: 'NOT_FOUND' });
+        if (ctx.user.role !== 'admin' && consultation.userId !== ctx.user.id) {
+          throw new TRPCError({ code: 'FORBIDDEN' });
+        }
+
+        const { isLiveAvatarConfigured, createLiveAvatarSessionToken } = await import('./liveAvatar');
+        if (!isLiveAvatarConfigured()) {
+          return { configured: false as const, sessionToken: null, sessionId: null };
+        }
+
+        try {
+          const { sessionToken, sessionId } = await createLiveAvatarSessionToken(input.language);
+          return { configured: true as const, sessionToken, sessionId };
+        } catch (err) {
+          // Never break the consultation because the avatar vendor is down —
+          // report it and let the client fall back to speech synthesis.
+          console.error('[LiveAvatar] token minting failed:', err);
+          return { configured: false as const, sessionToken: null, sessionId: null };
+        }
       }),
 
     // Save an updated transcript

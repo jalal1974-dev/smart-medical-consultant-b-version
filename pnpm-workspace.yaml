@@ -15,4 +15,5 @@ overrides:
 allowBuilds:
   "@tailwindcss/oxide": true
   esbuild: false
+  protobufjs: set this to true or false
   puppeteer: true

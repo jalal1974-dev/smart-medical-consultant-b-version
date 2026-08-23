@@ -8,8 +8,96 @@ import { trpc } from "@/lib/trpc";
 import { getLoginUrl } from "@/const";
 import { useState, useRef } from "react";
 import { toast } from "sonner";
-import { CheckCircle, XCircle, FileText, Image, Presentation, Network, Loader2, AlertCircle, Paperclip, File, FlaskConical, RefreshCw, ExternalLink, Upload, Link, Copy, X as XIcon } from "lucide-react";
+import { CheckCircle, XCircle, FileText, Image, Presentation, Network, Loader2, AlertCircle, Paperclip, File, FlaskConical, RefreshCw, ExternalLink, Upload, Link, Copy, X as XIcon, MessageSquare } from "lucide-react";
 import { format } from "date-fns";
+
+// ─── Avatar intake transcript for the reviewing doctor ──────────────────────
+// The patient's conversation with the AI intake avatar is the richest history
+// we hold, but it lives in its own table — without this card the doctor would
+// review the case without ever seeing what the patient actually said.
+function AvatarTranscriptCard({ consultationId, language }: { consultationId: number; language: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const { data, isLoading } = trpc.avatarSession.getTranscriptForReview.useQuery(
+    { consultationId },
+    { enabled: !!consultationId },
+  );
+
+  const messages = data?.messages ?? [];
+  const isAr = language === "ar";
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-6 flex justify-center">
+          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (messages.length === 0) return null;
+
+  const shown = expanded ? messages : messages.slice(-6);
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <MessageSquare className="w-4 h-4 text-primary" />
+          {isAr ? "محادثة المريض مع الأفاتار الطبي" : "Patient's AI Intake Conversation"}
+          <Badge variant="secondary" className="ml-auto text-xs">
+            {messages.length} {isAr ? "رسالة" : "messages"}
+          </Badge>
+        </CardTitle>
+        <CardDescription className="text-xs">
+          {isAr
+            ? "التاريخ المرضي الذي جمعه الأفاتار — راجعه قبل اعتماد التقارير."
+            : "History collected by the intake avatar — review before approving the reports."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {!expanded && messages.length > shown.length && (
+          <button
+            onClick={() => setExpanded(true)}
+            className="text-xs text-primary hover:underline mb-3"
+          >
+            {isAr
+              ? `عرض المحادثة كاملة (${messages.length})`
+              : `Show full conversation (${messages.length})`}
+          </button>
+        )}
+        <div className="flex flex-col gap-3 max-h-[420px] overflow-y-auto pr-1">
+          {shown.map((msg: { role: string; content: string; timestamp?: number }, idx: number) => (
+            <div
+              key={idx}
+              className={`rounded-lg px-3 py-2 text-sm leading-relaxed ${
+                msg.role === "assistant"
+                  ? "bg-muted/60 border border-border"
+                  : "bg-primary/10 border border-primary/20"
+              }`}
+              dir="auto"
+            >
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                {msg.role === "assistant"
+                  ? isAr ? "الأفاتار" : "Avatar"
+                  : isAr ? "المريض" : "Patient"}
+              </div>
+              {msg.content}
+            </div>
+          ))}
+        </div>
+        {expanded && (
+          <button
+            onClick={() => setExpanded(false)}
+            className="text-xs text-muted-foreground hover:underline mt-3"
+          >
+            {isAr ? "طيّ المحادثة" : "Collapse"}
+          </button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 // ─── Attached Records sub-component for admin ───────────────────────────────
 const ADMIN_RECORD_ICONS: Record<string, React.ReactNode> = {
@@ -518,6 +606,9 @@ export default function AIConsultationReview() {
                     )}
                   </CardContent>
                 </Card>
+
+                {/* Patient's conversation with the intake avatar */}
+                <AvatarTranscriptCard consultationId={selected.id} language={language} />
 
                 {/* Uploaded Medical Documents */}
                 {(selected.medicalReports || selected.labResults || selected.xrayImages || selected.otherDocuments) && (

@@ -1826,6 +1826,23 @@ export async function getAvatarSession(consultationId: number, userId: number): 
   return rows[0] ?? null;
 }
 
+/**
+ * Fetch the avatar session for a consultation regardless of which user owns it.
+ *
+ * Needed by the doctor's review screen: `getAvatarSession` keys on (consultation,
+ * user), so an admin calling it would look up a session under the *admin's* own
+ * user id and always get null — the patient's intake transcript would be
+ * invisible to the reviewing doctor. Callers must enforce admin access.
+ */
+export async function getAvatarSessionByConsultation(consultationId: number): Promise<AvatarSession | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(avatarSessions)
+    .where(eq(avatarSessions.consultationId, consultationId))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 export async function updateAvatarSessionTranscript(
   consultationId: number,
   userId: number,

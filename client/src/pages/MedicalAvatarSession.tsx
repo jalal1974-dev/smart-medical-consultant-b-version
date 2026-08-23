@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import LiveAvatarPanel, { type LiveAvatarHandle, type AvatarMode } from "@/components/LiveAvatarPanel";
 import {
   User,
   Send,
@@ -281,55 +282,6 @@ function detectQuickReplyGroup(
   return null;
 }
 
-// ─── Avatar Video Panel ───────────────────────────────────────────────────────
-function AvatarVideoPanel({
-  isActive,
-  isSpeaking,
-  language,
-}: {
-  isActive: boolean;
-  isSpeaking: boolean;
-  language: "en" | "ar";
-}) {
-  return (
-    <div className="relative w-full aspect-video bg-gradient-to-br from-primary/10 to-primary/5 rounded-xl overflow-hidden flex items-center justify-center border border-border">
-      <div className="flex flex-col items-center gap-4">
-        <div
-          className={`relative w-28 h-28 rounded-full bg-primary/20 flex items-center justify-center transition-all duration-300 ${
-            isSpeaking ? "ring-4 ring-primary ring-offset-2 scale-105" : ""
-          }`}
-        >
-          <Stethoscope className="w-14 h-14 text-primary" />
-          {isSpeaking && (
-            <span className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-background animate-pulse" />
-          )}
-        </div>
-        <div className="text-center">
-          <p className="text-sm font-semibold text-foreground">
-            {language === "ar" ? "الطبيب المساعد الذكي" : "AI Clinical Intake Doctor"}
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            {isActive
-              ? isSpeaking
-                ? language === "ar" ? "يتحدث..." : "Speaking..."
-                : language === "ar" ? "جاهز للمحادثة" : "Ready to continue"
-              : language === "ar"
-              ? "صف أعراضك أدناه للبدء"
-              : "Describe your symptoms below to begin"}
-          </p>
-        </div>
-      </div>
-      <div className="absolute bottom-3 left-3 right-3">
-        <div className="bg-background/80 backdrop-blur-sm rounded-lg px-3 py-2 text-xs text-muted-foreground text-center border border-border">
-          {language === "ar"
-            ? "🎥 سيتم تفعيل الفيديو التفاعلي عند إضافة مفتاح HeyGen API"
-            : "🎥 Interactive video activates when HeyGen API key is configured"}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Document Download Panel ──────────────────────────────────────────────────
 function DocumentPanel({
   consultation,
@@ -502,9 +454,11 @@ export default function MedicalAvatarSession() {
   const [isMuted, setIsMuted] = useState(false);
   const [language, setLanguage] = useState<"en" | "ar">("en");
   const [quickRepliesDismissed, setQuickRepliesDismissed] = useState(false);
+  const [avatarMode, setAvatarMode] = useState<AvatarMode>("idle");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const avatarRef = useRef<LiveAvatarHandle | null>(null);
 
   // ── Data fetching ──────────────────────────────────────────────────────────
   const { data: consultations } = trpc.consultation.list.useQuery(undefined, {
@@ -549,7 +503,14 @@ export default function MedicalAvatarSession() {
         timestamp: Date.now(),
       };
       setMessages((prev) => [...prev, assistantMsg]);
-      if (!isMuted && "speechSynthesis" in window) {
+
+      // Voice output: prefer the live video avatar. Only fall back to the
+      // browser's speech synthesis when no live session is streaming —
+      // otherwise the reply would be spoken twice, out of sync.
+      if (isMuted) return;
+      if (avatarRef.current?.isLive()) {
+        avatarRef.current.speak(replyText);
+      } else if ("speechSynthesis" in window) {
         const utterance = new SpeechSynthesisUtterance(replyText);
         utterance.lang = language === "ar" ? "ar-SA" : "en-US";
         utterance.rate = 0.9;
@@ -629,7 +590,9 @@ export default function MedicalAvatarSession() {
 
   const toggleMute = () => {
     if (!isMuted) {
+      // Silence whichever voice channel is active.
       window.speechSynthesis?.cancel();
+      avatarRef.current?.interrupt();
       setIsSpeaking(false);
     }
     setIsMuted((m) => !m);
@@ -707,7 +670,16 @@ export default function MedicalAvatarSession() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* ── Left: Avatar + Documents ── */}
           <div className="lg:col-span-1 flex flex-col gap-4">
-            <AvatarVideoPanel isActive={messages.length > 0} isSpeaking={isSpeaking} language={language} />
+            <LiveAvatarPanel
+              ref={avatarRef}
+              consultationId={consultationId}
+              language={language}
+              onModeChange={setAvatarMode}
+              onSpeakingChange={setIsSpeaking}
+              // Patient spoke into the mic — treat it exactly like a typed reply
+              // so it flows through the same clinical LLM and transcript.
+              onUserSpeech={(text) => handleSend(text)}
+            />
 
             <Card className="p-4">
               <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
