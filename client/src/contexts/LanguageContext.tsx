@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { detectBrowserLanguage } from "@/lib/detectLanguage";
 import { Language, translations, TranslationKey } from "@shared/i18n";
 
 interface LanguageContextType {
@@ -13,7 +14,12 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguageState] = useState<Language>(() => {
     const stored = localStorage.getItem("language");
-    return (stored === "ar" || stored === "en") ? stored : "en";
+    if (stored === "ar" || stored === "en") return stored;
+    // No stored choice: follow the browser. Arabic-first clinic, so an Arabic
+    // or unknown browser gets Arabic rather than silently serving English.
+    // This also becomes the consultation's preferredLanguage, which drives the
+    // intake AI's language and the spoken voice.
+    return detectBrowserLanguage();
   });
 
   const setLanguage = (lang: Language) => {

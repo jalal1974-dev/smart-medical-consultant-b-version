@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import LiveAvatarPanel, { type LiveAvatarHandle, type AvatarMode } from "@/components/LiveAvatarPanel";
+import { detectLanguage, detectBrowserLanguage, hasVoiceFor, pickVoice } from "@/lib/detectLanguage";
 import {
   User,
   Send,
@@ -452,7 +453,14 @@ export default function MedicalAvatarSession() {
   const [input, setInput] = useState("");
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [language, setLanguage] = useState<"en" | "ar">("en");
+  // Start from the browser's language (Arabic-first clinic) rather than a hard
+  // "en". The consultation's stored preference overrides this once loaded, and
+  // what the patient actually types overrides both.
+  const [language, setLanguage] = useState<"en" | "ar">(() => detectBrowserLanguage());
+  // Set once the patient's own writing tells us the language — from then on we
+  // trust that over the stored preference, which is often just a stale default.
+  const [languageLockedByPatient, setLanguageLockedByPatient] = useState(false);
+  const [voiceMissing, setVoiceMissing] = useState(false);
   const [quickRepliesDismissed, setQuickRepliesDismissed] = useState(false);
   const [avatarMode, setAvatarMode] = useState<AvatarMode>("idle");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -511,13 +519,25 @@ export default function MedicalAvatarSession() {
       if (avatarRef.current?.isLive()) {
         avatarRef.current.speak(replyText);
       } else if ("speechSynthesis" in window) {
+        // Speak in the language the reply is actually written in. The model
+        // mirrors the patient, so it can answer in Arabic even when the stored
+        // preference says English — reading that with an English voice produces
+        // gibberish. Detecting the reply text itself is the reliable signal.
+        const spokenLang = detectLanguage(replyText) ?? language;
         const utterance = new SpeechSynthesisUtterance(replyText);
-        utterance.lang = language === "ar" ? "ar-SA" : "en-US";
+        utterance.lang = spokenLang === "ar" ? "ar-SA" : "en-US";
+        // Bind an actual installed voice when one exists; otherwise the browser
+        // may fall back to its default (usually English) for Arabic text.
+        const voice = pickVoice(spokenLang);
+        if (voice) utterance.voice = voice;
         utterance.rate = 0.9;
         utterance.onstart = () => setIsSpeaking(true);
         utterance.onend = () => setIsSpeaking(false);
         synthRef.current = utterance;
         window.speechSynthesis.speak(utterance);
+
+        if (spokenLang !== language) setLanguage(spokenLang);
+        setVoiceMissing(!hasVoiceFor(spokenLang));
       }
     },
     onError: (err) => {
@@ -533,10 +553,23 @@ export default function MedicalAvatarSession() {
   }, [consultationId, isAuthenticated]);
 
   useEffect(() => {
-    if (consultation?.preferredLanguage) {
+    // The patient's own writing wins — never override it with the stored
+    // preference, which is frequently just the site's default.
+    if (consultation?.preferredLanguage && !languageLockedByPatient) {
       setLanguage(consultation.preferredLanguage as "en" | "ar");
     }
-  }, [consultation]);
+  }, [consultation, languageLockedByPatient]);
+
+  // Warn when the device has no voice for the current language. Voices load
+  // asynchronously, so re-check on `voiceschanged` instead of trusting the
+  // first (often empty) read.
+  useEffect(() => {
+    if (!("speechSynthesis" in window)) return;
+    const check = () => setVoiceMissing(!hasVoiceFor(language));
+    check();
+    window.speechSynthesis.addEventListener?.("voiceschanged", check);
+    return () => window.speechSynthesis.removeEventListener?.("voiceschanged", check);
+  }, [language]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -553,11 +586,26 @@ export default function MedicalAvatarSession() {
     (overrideText?: string) => {
       const text = overrideText ?? input.trim();
       if (!text || !consultationId || chatMutation.isPending) return;
+
+      // Follow the language the patient is actually writing in. Without this an
+      // Arabic patient on an English-defaulted consultation gets Arabic text
+      // read aloud by an English voice — unintelligible.
+      const detected = detectLanguage(text);
+      const effectiveLanguage = detected ?? language;
+      if (detected && detected !== language) {
+        setLanguage(detected);
+        setLanguageLockedByPatient(true);
+      } else if (detected) {
+        setLanguageLockedByPatient(true);
+      }
+
       setMessages((prev) => [
         ...prev,
         { role: "user", content: text, timestamp: Date.now() },
       ]);
-      chatMutation.mutate({ consultationId, message: text, language });
+      // Send the detected language, not the stale state — setLanguage above has
+      // not applied yet on this render.
+      chatMutation.mutate({ consultationId, message: text, language: effectiveLanguage });
       if (!overrideText) setInput("");
     },
     [input, consultationId, chatMutation, language]
@@ -816,6 +864,22 @@ export default function MedicalAvatarSession() {
                   onDismiss={() => setQuickRepliesDismissed(true)}
                   disabled={chatMutation.isPending}
                 />
+              )}
+
+              {/* Missing-voice notice — Arabic voices are often absent on
+                  desktop Windows. Tell the patient the text is still correct
+                  instead of leaving them with garbled or silent audio. */}
+              {voiceMissing && !isMuted && (
+                <div className="px-4 py-2 bg-amber-50 border-t border-amber-200">
+                  <p className="text-xs text-amber-800 flex items-start gap-1.5">
+                    <AlertCircle className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                    <span>
+                      {language === "ar"
+                        ? "جهازك لا يحتوي على صوت عربي، لذلك قد يكون النطق غير واضح. النص أعلاه صحيح — يمكنك القراءة بدل الاستماع، أو كتم الصوت من الأعلى."
+                        : "Your device has no installed voice for this language, so the audio may sound wrong. The text above is correct — you can read instead of listening, or mute the sound above."}
+                    </span>
+                  </p>
+                </div>
               )}
 
               {/* Disclaimer */}
