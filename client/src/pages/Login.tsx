@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import SocialAuthButtons from "@/components/SocialAuthButtons";
 import { toast } from "sonner";
 import { Eye, EyeOff, User, Lock, LogIn, Shield, Loader2 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -27,7 +28,15 @@ export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() => {
+    // Social sign-in redirects back here with a reason when it could not
+    // complete, so the patient sees why instead of a silent bounce.
+    if (typeof window === "undefined") return null;
+    const reason = new URLSearchParams(window.location.search).get("error");
+    if (reason === "social_auth_cancelled") return "Sign-in was cancelled. You can try again or use your username and password.";
+    if (reason === "social_auth_failed") return "We could not complete that sign-in. Please try again, or use your username and password.";
+    return null;
+  });
 
   const utils = trpc.useUtils();
 
@@ -160,6 +169,10 @@ export default function Login() {
                 </Link>
               </p>
             </form>
+
+            <div className="mt-4">
+              <SocialAuthButtons mode="login" />
+            </div>
 
             <div className="flex items-center gap-2 mt-4 p-3 bg-slate-700/30 rounded-lg">
               <Shield className="w-4 h-4 text-blue-400 shrink-0" />

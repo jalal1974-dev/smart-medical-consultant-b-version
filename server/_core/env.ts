@@ -71,6 +71,16 @@ export const ENV = {
   // Sandbox sessions are free/watermarked — keep true until the plan is live.
   liveAvatarSandbox:  optionalEnv("LIVEAVATAR_SANDBOX", "true") === "true",
 
+  // ── Social sign-in (optional) ──────────────────────────────────────────────
+  //    Each provider's button only appears once its pair of values is set, so a
+  //    half-configured provider can never show a button that fails.
+  //    Google:   https://console.cloud.google.com → APIs & Services → Credentials
+  //    Facebook: https://developers.facebook.com → your app → Facebook Login
+  googleClientId:     optionalEnv("GOOGLE_CLIENT_ID"),
+  googleClientSecret: optionalEnv("GOOGLE_CLIENT_SECRET"),
+  facebookAppId:      optionalEnv("FACEBOOK_APP_ID"),
+  facebookAppSecret:  optionalEnv("FACEBOOK_APP_SECRET"),
+
   // ── Optional ───────────────────────────────────────────────────────────────
   oAuthServerUrl: optionalEnv("OAUTH_SERVER_URL"),
   appId:          optionalEnv("VITE_APP_ID", "smc-independent"),

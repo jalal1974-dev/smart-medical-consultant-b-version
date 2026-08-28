@@ -34,6 +34,13 @@ export const appRouter = router({
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
+
+    // Which social sign-in buttons to render. Driven by server config so a
+    // provider whose keys are missing never shows a button that would fail.
+    socialProviders: publicProcedure.query(async () => {
+      const { enabledSocialProviders } = await import('./socialAuth');
+      return { providers: enabledSocialProviders() };
+    }),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import SocialAuthButtons from "@/components/SocialAuthButtons";
 import { toast } from "sonner";
 import { Eye, EyeOff, CheckCircle, User, Mail, Lock, ArrowRight, Shield, FolderHeart, Zap, Gift } from "lucide-react";
 
@@ -234,6 +235,10 @@ export default function Register() {
                   <Link href="/login" className="text-blue-400 hover:text-blue-300 font-medium">Sign in</Link>
                 </p>
               </form>
+
+              <div className="mt-4">
+                <SocialAuthButtons mode="register" />
+              </div>
             </CardContent>
           </Card>
         )}
