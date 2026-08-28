@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import LiveAvatarPanel, { type LiveAvatarHandle, type AvatarMode } from "@/components/LiveAvatarPanel";
 import { detectLanguage, detectBrowserLanguage, hasVoiceFor, pickVoice } from "@/lib/detectLanguage";
+import { useVoiceChat } from "@/hooks/useVoiceChat";
 import {
   User,
   Send,
@@ -23,6 +24,8 @@ import {
   ArrowLeft,
   Volume2,
   VolumeX,
+  Mic,
+  MicOff,
   AlertCircle,
   Stethoscope,
   ClipboardList,
@@ -461,6 +464,25 @@ export default function MedicalAvatarSession() {
   // trust that over the stored preference, which is often just a stale default.
   const [languageLockedByPatient, setLanguageLockedByPatient] = useState(false);
   const [voiceMissing, setVoiceMissing] = useState(false);
+  // Hands-free: keep the microphone cycling so the patient can hold a spoken
+  // conversation without touching the screen between turns.
+  const [handsFree, setHandsFree] = useState(false);
+
+  // handleSend is defined further down; route speech through a ref so the voice
+  // hook can call it without a declaration-order problem.
+  const handleSendRef = useRef<(text?: string) => void>(() => {});
+
+  // Must be referentially stable: the hook rebuilds startListening whenever
+  // onTranscript changes, and an inline arrow would reset the hands-free timer
+  // on every render so the microphone would never reopen.
+  const handleTranscript = useCallback((text: string) => {
+    handleSendRef.current(text);
+  }, []);
+
+  const voice = useVoiceChat({
+    initialLanguage: language,
+    onTranscript: handleTranscript,
+  });
   const [quickRepliesDismissed, setQuickRepliesDismissed] = useState(false);
   const [avatarMode, setAvatarMode] = useState<AvatarMode>("idle");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -628,6 +650,47 @@ export default function MedicalAvatarSession() {
   const handleOther = useCallback(() => {
     inputRef.current?.focus();
   }, []);
+
+  // Let the voice hook reach the latest handleSend.
+  useEffect(() => {
+    handleSendRef.current = handleSend;
+  }, [handleSend]);
+
+  // Speech recognition must use the same language the interview is running in.
+  useEffect(() => {
+    voice.setLanguage(language);
+  }, [language, voice.setLanguage]);
+
+  // Never listen while the avatar is talking — the microphone would transcribe
+  // the avatar's own voice and send it back as if the patient had said it.
+  useEffect(() => {
+    if (isSpeaking && voice.isListening) voice.stopListening();
+  }, [isSpeaking, voice.isListening, voice.stopListening]);
+
+  // Hands-free turn-taking: once the avatar finishes speaking and the reply has
+  // landed, reopen the microphone for the patient's next answer.
+  useEffect(() => {
+    if (!handsFree || isMuted) return;
+    if (isSpeaking || chatMutation.isPending || voice.isListening) return;
+    const timer = setTimeout(() => {
+      if (handsFree && !isSpeaking && !chatMutation.isPending) voice.startListening();
+    }, 450); // brief gap so the patient hears the question end before the beep
+    return () => clearTimeout(timer);
+  }, [handsFree, isMuted, isSpeaking, chatMutation.isPending, voice.isListening, voice.startListening]);
+
+  // Leaving the page must release the microphone.
+  useEffect(() => {
+    return () => { voice.stopListening(); };
+  }, []);
+
+  const toggleHandsFree = useCallback(() => {
+    setHandsFree((on) => {
+      const next = !on;
+      if (!next) voice.stopListening();
+      else if (!isSpeaking && !chatMutation.isPending) voice.startListening();
+      return next;
+    });
+  }, [voice, isSpeaking, chatMutation.isPending]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -892,17 +955,64 @@ export default function MedicalAvatarSession() {
                 </p>
               </div>
 
+              {/* Live speech feedback — shows the patient they are being heard */}
+              {(voice.isListening || voice.interimTranscript) && (
+                <div className="px-4 py-2 bg-primary/5 border-t border-primary/20">
+                  <div className="flex items-center gap-2">
+                    <span className="flex items-end gap-[2px] h-3.5 flex-shrink-0" aria-hidden="true">
+                      {[0, 1, 2, 3, 4].map((i) => (
+                        <span
+                          key={i}
+                          className="w-[3px] bg-primary rounded-full"
+                          style={{ height: "100%", animation: `micBar 850ms ease-in-out ${i * 100}ms infinite` }}
+                        />
+                      ))}
+                    </span>
+                    <p className="text-xs text-foreground/80 flex-1 truncate" dir="auto">
+                      {voice.interimTranscript ||
+                        (language === "ar" ? "أستمع إليك... تحدّث الآن" : "Listening… speak now")}
+                    </p>
+                  </div>
+                  <style>{`
+                    @keyframes micBar {
+                      0%, 100% { transform: scaleY(0.3); }
+                      50%      { transform: scaleY(1); }
+                    }
+                  `}</style>
+                </div>
+              )}
+
               {/* Input */}
               <div className="p-4 border-t border-border flex gap-2">
+                {voice.isSTTSupported && (
+                  <Button
+                    onClick={toggleHandsFree}
+                    disabled={chatMutation.isPending}
+                    size="icon"
+                    variant={handsFree ? "default" : "outline"}
+                    className={`self-end flex-shrink-0 ${
+                      voice.isListening ? "ring-2 ring-primary ring-offset-1 animate-pulse" : ""
+                    }`}
+                    title={
+                      handsFree
+                        ? language === "ar" ? "إيقاف المحادثة الصوتية" : "Stop voice conversation"
+                        : language === "ar" ? "تحدّث بصوتك" : "Speak instead of typing"
+                    }
+                  >
+                    {handsFree ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+                  </Button>
+                )}
                 <Textarea
                   ref={inputRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={
-                    language === "ar"
-                      ? "اكتب ردك هنا، أو اختر من الخيارات أعلاه..."
-                      : "Type your response, or tap a quick reply above..."
+                    voice.isListening
+                      ? language === "ar" ? "أستمع إليك..." : "Listening…"
+                      : language === "ar"
+                      ? "اكتب ردك، أو اضغط المايكروفون للتحدث..."
+                      : "Type your response, or tap the microphone to speak…"
                   }
                   className="flex-1 resize-none min-h-[44px] max-h-[120px]"
                   rows={1}
@@ -921,6 +1031,18 @@ export default function MedicalAvatarSession() {
                   )}
                 </Button>
               </div>
+
+              {/* Tell the patient voice input is available on first use */}
+              {voice.isSTTSupported && !handsFree && messages.length > 0 && (
+                <div className="px-4 pb-3 -mt-1">
+                  <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                    <Mic className="w-3 h-3 flex-shrink-0" />
+                    {language === "ar"
+                      ? "يمكنك التحدّث بدل الكتابة — اضغط زر المايكروفون."
+                      : "You can speak instead of typing — tap the microphone."}
+                  </p>
+                </div>
+              )}
             </Card>
           </div>
         </div>
