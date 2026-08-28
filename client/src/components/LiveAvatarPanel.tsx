@@ -161,7 +161,11 @@ const LiveAvatarPanel = forwardRef<LiveAvatarHandle, Props>(function LiveAvatarP
       const res = await tokenMutation.mutateAsync({ consultationId, language });
 
       if (!res.configured || !res.sessionToken) {
-        // Not an error the patient should see — the clinic simply has no key yet.
+        // Not an error the patient should see — the clinic simply has no key, or
+        // the vendor rejected the config. Log the reason so the operator can
+        // diagnose it from the browser console instead of guessing why the
+        // video silently downgraded to voice-only.
+        if (res.reason) console.warn("[LiveAvatar] video unavailable —", res.reason);
         if (mountedRef.current) applyMode("fallback");
         return;
       }

@@ -3183,17 +3183,25 @@ export const appRouter = router({
 
         const { isLiveAvatarConfigured, createLiveAvatarSessionToken } = await import('./liveAvatar');
         if (!isLiveAvatarConfigured()) {
-          return { configured: false as const, sessionToken: null, sessionId: null };
+          return {
+            configured: false as const, sessionToken: null, sessionId: null,
+            reason: 'LIVEAVATAR_API_KEY / LIVEAVATAR_AVATAR_ID are not set on the server',
+          };
         }
 
         try {
           const { sessionToken, sessionId } = await createLiveAvatarSessionToken(input.language);
-          return { configured: true as const, sessionToken, sessionId };
+          return { configured: true as const, sessionToken, sessionId, reason: null };
         } catch (err) {
           // Never break the consultation because the avatar vendor is down —
-          // report it and let the client fall back to speech synthesis.
-          console.error('[LiveAvatar] token minting failed:', err);
-          return { configured: false as const, sessionToken: null, sessionId: null };
+          // fall back to speech synthesis. Return the reason so the operator can
+          // diagnose it (browser console + server log) instead of seeing an
+          // unexplained silent downgrade. Vendor messages describe config
+          // problems (bad avatar id, sandbox not allowed, quota) and carry no
+          // secrets — the API key never leaves the server.
+          const reason = err instanceof Error ? err.message : String(err);
+          console.error('[LiveAvatar] token minting failed:', reason);
+          return { configured: false as const, sessionToken: null, sessionId: null, reason };
         }
       }),
 
