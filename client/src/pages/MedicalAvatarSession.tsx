@@ -676,6 +676,7 @@ export default function MedicalAvatarSession() {
               language={language}
               onModeChange={setAvatarMode}
               onSpeakingChange={setIsSpeaking}
+              conversationStarted={messages.length > 0}
               // Patient spoke into the mic — treat it exactly like a typed reply
               // so it flows through the same clinical LLM and transcript.
               onUserSpeech={(text) => handleSend(text)}

@@ -3165,6 +3165,15 @@ export const appRouter = router({
         return { messages, updatedAt: (session as any).updatedAt ?? null };
       }),
 
+    // Is the paid video avatar available at all? Lets the intake page hide the
+    // "Start video doctor" button entirely when the clinic runs voice-only, so
+    // patients are never offered a button that cannot work (and the clinic can
+    // never be billed by accident).
+    videoAvailable: protectedProcedure.query(async () => {
+      const { isLiveAvatarConfigured } = await import('./liveAvatar');
+      return { available: isLiveAvatarConfigured() };
+    }),
+
     // Mint a short-lived LiveAvatar session token for the interactive video
     // avatar. The API key stays on the server; the browser only ever sees this
     // per-session token. Returns configured:false when LiveAvatar is not set up,

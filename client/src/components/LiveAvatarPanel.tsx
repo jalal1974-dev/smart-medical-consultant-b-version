@@ -36,6 +36,15 @@ import {
 
 export type AvatarMode = "idle" | "connecting" | "live" | "fallback";
 
+/**
+ * The clinic's own doctor artwork, shown during voice-only intake.
+ * Served from `client/public/`. WebP at 768px — 68 KB instead of the 1.8 MB
+ * source PNG, which matters because patients often open this on mobile data.
+ * If the file is ever absent the panel degrades to the stethoscope mark rather
+ * than showing a broken image.
+ */
+const DOCTOR_IMAGE_SRC = "/doctor-avatar.webp";
+
 export interface LiveAvatarHandle {
   /** Make the avatar say this text. No-op unless a live session is running. */
   speak: (text: string) => void;
@@ -54,6 +63,8 @@ interface Props {
   onSpeakingChange?: (speaking: boolean) => void;
   /** Fired with transcribed patient speech when the mic is on. */
   onUserSpeech?: (text: string) => void;
+  /** True once the interview has begun — changes the idle caption. */
+  conversationStarted?: boolean;
 }
 
 const T = {
@@ -88,13 +99,22 @@ const T = {
 } as const;
 
 const LiveAvatarPanel = forwardRef<LiveAvatarHandle, Props>(function LiveAvatarPanel(
-  { consultationId, language, onModeChange, onSpeakingChange, onUserSpeech },
+  { consultationId, language, onModeChange, onSpeakingChange, onUserSpeech, conversationStarted },
   ref,
 ) {
   const [mode, setMode] = useState<AvatarMode>("idle");
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [micOn, setMicOn] = useState(false);
   const [errorNote, setErrorNote] = useState<string | null>(null);
+  const [imageFailed, setImageFailed] = useState(false);
+  const messagesStarted = Boolean(conversationStarted);
+
+  // Only offer the paid video avatar when the server actually has it configured,
+  // so a voice-only clinic never shows a button that cannot work.
+  const { data: videoCfg } = trpc.avatarSession.videoAvailable.useQuery(undefined, {
+    staleTime: 5 * 60 * 1000,
+  });
+  const videoAvailable = videoCfg?.available === true;
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   // Holds the LiveAvatarSession instance. `any` because the SDK is loaded
@@ -288,25 +308,71 @@ const LiveAvatarPanel = forwardRef<LiveAvatarHandle, Props>(function LiveAvatarP
           className={`w-full h-full object-cover ${showVideo ? "" : "hidden"}`}
         />
 
-        {/* Placeholder / fallback face */}
+        {/* Voice-only mode: the clinic's own doctor artwork.
+            Falls back to the stethoscope mark if the image is missing, so the
+            page never shows a broken image. */}
         {!showVideo && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
-            <div
-              className={`relative w-28 h-28 rounded-full bg-primary/20 flex items-center justify-center transition-all duration-300 ${
-                isSpeaking ? "ring-4 ring-primary ring-offset-2 scale-105" : ""
-              }`}
-            >
-              <Stethoscope className="w-14 h-14 text-primary" />
-              {isSpeaking && (
-                <span className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-background animate-pulse" />
-              )}
+          <div className="absolute inset-0">
+            {!imageFailed ? (
+              <img
+                src={DOCTOR_IMAGE_SRC}
+                alt={t.title}
+                onError={() => setImageFailed(true)}
+                className={`w-full h-full object-cover transition-transform duration-700 ${
+                  isSpeaking ? "scale-[1.03]" : "scale-100"
+                }`}
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <div
+                  className={`relative w-28 h-28 rounded-full bg-primary/20 flex items-center justify-center transition-all duration-300 ${
+                    isSpeaking ? "ring-4 ring-primary ring-offset-2 scale-105" : ""
+                  }`}
+                >
+                  <Stethoscope className="w-14 h-14 text-primary" />
+                </div>
+              </div>
+            )}
+
+            {/* Caption bar: who is talking + animated speaking bars */}
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/45 to-transparent px-3 pt-8 pb-2.5">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-white drop-shadow">{t.title}</span>
+                <span className="ml-auto flex items-center gap-1.5">
+                  {isSpeaking ? (
+                    <>
+                      <span className="flex items-end gap-[2px] h-3" aria-hidden="true">
+                        {[0, 1, 2, 3].map((i) => (
+                          <span
+                            key={i}
+                            className="w-[3px] bg-white/90 rounded-full"
+                            style={{
+                              height: "100%",
+                              animation: `avatarBar 900ms ease-in-out ${i * 120}ms infinite`,
+                            }}
+                          />
+                        ))}
+                      </span>
+                      <span className="text-[10px] text-white/90">{t.speaking}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <span className="text-[10px] text-white/90">
+                        {messagesStarted ? t.ready : t.idle}
+                      </span>
+                    </>
+                  )}
+                </span>
+              </div>
             </div>
-            <div className="text-center px-4">
-              <p className="text-sm font-semibold text-foreground">{t.title}</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {mode === "fallback" ? t.fallbackNote : t.idle}
-              </p>
-            </div>
+
+            <style>{`
+              @keyframes avatarBar {
+                0%, 100% { transform: scaleY(0.35); }
+                50%      { transform: scaleY(1); }
+              }
+            `}</style>
           </div>
         )}
 
@@ -329,8 +395,8 @@ const LiveAvatarPanel = forwardRef<LiveAvatarHandle, Props>(function LiveAvatarP
         )}
       </div>
 
-      {/* Controls */}
-      <div className="flex items-center gap-2">
+      {/* Controls — hidden entirely when the clinic runs voice-only */}
+      <div className={`items-center gap-2 ${videoAvailable ? "flex" : "hidden"}`}>
         {mode === "live" ? (
           <>
             <Button variant="outline" size="sm" className="gap-2 flex-1" onClick={stopSession}>
