@@ -126,6 +126,22 @@ then push to GitHub. Keep it small — the current file is 68 KB; anything over 
 few hundred KB will slow the page on mobile data. If the file is missing the page
 shows a stethoscope icon instead of breaking.
 
+### Language: Arabic or English
+
+**The avatar follows whatever language the patient actually writes in.** If they
+type in Arabic, the questions and the voice switch to Arabic — even if the
+consultation was created as English. The patient's own writing always wins over
+the stored setting.
+
+- New visitors default to their **browser's language**, falling back to **Arabic**.
+- Mixed writing stays Arabic — "عندي ألم وعملت CT scan" is treated as Arabic,
+  because Arabic speakers routinely mix in English medical terms.
+- The AR / EN buttons at the top still let anyone switch manually.
+
+**If the patient's device has no Arabic voice** (common on desktop Windows; fine
+on phones) an amber notice tells them the on-screen text is still correct and
+they can read instead of listen. Nothing breaks — only the audio is affected.
+
 ### Optional: paid video avatar (currently OFF)
 
 The LiveAvatar/HeyGen integration is built and dormant. While the env vars below
