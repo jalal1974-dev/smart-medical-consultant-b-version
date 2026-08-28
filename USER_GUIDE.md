@@ -126,6 +126,22 @@ then push to GitHub. Keep it small — the current file is 68 KB; anything over 
 few hundred KB will slow the page on mobile data. If the file is missing the page
 shows a stethoscope icon instead of breaking.
 
+### Speaking instead of typing
+
+The patient can **hold a spoken conversation** with the avatar. They tap the
+microphone button once, and from then on it is hands-free: they speak, the
+avatar answers aloud, and the microphone reopens automatically for the next
+answer. Tapping it again stops.
+
+- A live waveform and the words appearing on screen show them they are heard.
+- The microphone closes while the avatar talks, so it never records the avatar's
+  own voice and sends it back as the patient's answer.
+- **Typing always still works** — nothing is forced.
+- Speech recognition needs **Chrome, Edge or Safari**. On Firefox the microphone
+  button is hidden automatically and the patient just types.
+- Recognition follows the interview language, so Arabic speech is transcribed as
+  Arabic.
+
 ### Language: Arabic or English
 
 **The avatar follows whatever language the patient actually writes in.** If they
