@@ -93,7 +93,7 @@ Workflow: new submissions arrive as *Submitted* → review the AI report → adj
 | Domain + SSL | smartmedcon.com (Hostinger) | SSL auto-managed |
 | Database | MySQL 8.4 in Docker on your VPS (srv926545, 31.97.126.199), container `smc-mysql` | Runs 24/7; admin access via hPanel → VPS → Terminal: `docker exec -it smc-mysql mysql -uroot -p` |
 | AI analysis | OpenRouter (Gemini 2.5 Flash) | Key in Web App env vars |
-| Video avatar (intake) | LiveAvatar / HeyGen — supplies face + voice only | Keys in Web App env vars. **If unset, the intake page automatically runs voice-only — nothing breaks.** See §7 |
+| Intake avatar | **Voice-only (current choice)** — clinic artwork + browser speech. Free | Optional paid video avatar (LiveAvatar/HeyGen) is built but switched OFF. See §7 |
 | Voice transcription | Groq Whisper | Key in Web App env vars |
 | File storage | Cloudflare R2 (`smc-files` bucket) | |
 | Emails (password reset) | Resend | |
@@ -105,32 +105,49 @@ docker exec -it smc-mysql mysql -uroot -p
 ```
 then re-create the app user for the new IP (`CREATE USER 'smc_user'@'<new-ip>' ...` + grant), matching the DATABASE_URL in the Web App environment variables.
 
-## 7. Video Avatar (LiveAvatar) — turning it on / off
+## 7. The intake avatar
 
-The intake page (`/consultation/<id>/avatar`) can run a **talking video doctor**.
-The avatar only provides the face and the voice — the medical questioning is still
-our own AI, so the history-taking, the differential-diagnosis logic and the
-"never tell the patient a diagnosis" rules are unchanged.
+The intake page (`/consultation/<id>/avatar`) runs the AI doctor that takes the
+patient's history. It has two possible faces — **the medical questioning is
+identical in both.** Only the presentation differs.
 
-**To turn it on** — hPanel → Web App → Environment variables (same screen as
-`LLM_API_KEY`), then restart the app:
+### Current setting: voice-only (free) ✅
+
+The patient sees the clinic's doctor artwork and hears the questions through the
+browser's speech. Animated sound bars show when the AI is talking; a green dot
+shows when it is the patient's turn.
+
+**This costs nothing per consultation.** It is the deliberate choice: the paid
+video avatar bills per streaming minute, and a full history-taking session could
+cost more than the $5 consultation earns.
+
+**To change the doctor picture:** replace `client/public/doctor-avatar.webp`,
+then push to GitHub. Keep it small — the current file is 68 KB; anything over a
+few hundred KB will slow the page on mobile data. If the file is missing the page
+shows a stethoscope icon instead of breaking.
+
+### Optional: paid video avatar (currently OFF)
+
+The LiveAvatar/HeyGen integration is built and dormant. While the env vars below
+are unset, the "Start video doctor" button does not appear at all, so it cannot
+be triggered or billed by accident.
+
+To enable it, set these in hPanel → Web App → Environment variables and restart:
 
 | Variable | Where to get it |
 |---|---|
 | `LIVEAVATAR_API_KEY` | liveavatar.com → Settings → API keys |
-| `LIVEAVATAR_AVATAR_ID` | liveavatar.com → Avatars → pick one → copy its UUID |
-| `LIVEAVATAR_SANDBOX` | `true` = free but watermarked. `false` on a paid plan |
+| `LIVEAVATAR_AVATAR_ID` | liveavatar.com → Avatars → copy the UUID |
+| `LIVEAVATAR_SANDBOX` | `false` — sandbox rejects stock avatars (tested) |
 
-**To turn it off:** delete `LIVEAVATAR_API_KEY` and restart. The page falls back
-to the voice-only avatar on its own.
+⚠️ **Check the per-minute rate against the $5 consultation price first.**
 
-**Cost warning:** LiveAvatar bills per streaming minute. A long history-taking
-session can be expensive — check this against the $5/consultation price before
-switching `LIVEAVATAR_SANDBOX` to `false`. Voice-only mode is free.
+**Patients never see an error.** If the key is wrong or the vendor is down, the
+session quietly uses voice-only instead of failing. The reason is written to the
+browser console and to hPanel → Runtime logs so you can diagnose it.
 
-**Patient never sees an error:** if the key is missing, wrong, or LiveAvatar is
-down, the session silently uses the browser voice instead of failing.
+### Where the doctor reads the result
 
-**Where the doctor reads it:** whatever the patient tells the avatar appears in
-Admin → AI Review as *"Patient's AI Intake Conversation"*, above the uploaded
-documents. Read it before approving the reports.
+Whatever the patient tells the avatar appears in **Admin → AI Review** as
+*"Patient's AI Intake Conversation"*, above the uploaded documents. Read it
+before approving the reports.
