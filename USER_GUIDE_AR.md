@@ -105,7 +105,40 @@ docker exec -it smc-mysql mysql -uroot -p
 ```
 ثم أعد إنشاء مستخدم التطبيق بالعنوان الجديد (`CREATE USER 'smc_user'@'<new-ip>' ...` مع الصلاحيات) بما يطابق DATABASE_URL في متغيرات بيئة الـ Web App.
 
-## ٧. أفاتار المقابلة
+## ٧. الدخول عبر Google / Facebook
+
+يستطيع المريض التسجيل والدخول عبر **Google** أو **Facebook** بدل إنشاء اسم
+مستخدم وكلمة مرور. ولا يظهر أي زر إلا بعد ضبط مفاتيحه، فلا يصل المريض إلى طريق
+مسدود.
+
+**للتفعيل — hPanel ← Web App ← متغيرات البيئة، ثم أعد التشغيل:**
+
+| المتغيّر | من أين تحصل عليه |
+|---|---|
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | console.cloud.google.com ← APIs & Services ← Credentials ← OAuth client ID ← **Web application** |
+| `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET` | developers.facebook.com ← تطبيقك ← Facebook Login ← Settings |
+
+**يجب إضافة روابط العودة في لوحة المزوّد، وإلا رفض تسجيل الدخول:**
+
+```
+https://smartmedcon.com/api/auth/google/callback
+https://smartmedcon.com/api/auth/facebook/callback
+```
+
+تسمّيها Google «Authorised redirect URIs»، ويسمّيها Facebook «Valid OAuth
+Redirect URIs». ويجب أن تتطابق حرفياً مع `https`.
+
+### كيف تُربط الحسابات
+
+- الدخول بنفس حساب Google/Facebook يعود دائماً إلى نفس ملف المريض.
+- إذا كان المريض **مسجّلاً سابقاً بكلمة مرور** ثم استخدم Google بنفس البريد،
+  فسيدخل إلى **ملفه الحالي** لا إلى ملف مكرّر، وتبقى كلمة مروره تعمل.
+- ويحدث ذلك فقط عندما يؤكّد المزوّد ملكية البريد. أما البريد غير المؤكّد فلا
+  يُربط أبداً، لأن ذلك يتيح لشخص الوصول إلى ملف طبي بادعاء بريد لا يملكه.
+- حسابات Facebook المُنشأة برقم هاتف لا تعطينا بريداً؛ يحصل أصحابها على ملف
+  جديد، ويُفضّل أن يستخدموا نفس الزر في كل مرة.
+
+## ٨. أفاتار المقابلة
 
 صفحة المقابلة (`/consultation/<id>/avatar`) تُشغّل الطبيب الذكي الذي يأخذ التاريخ
 المرضي. له شكلان ممكنان — **والأسئلة الطبية متطابقة تماماً في الحالتين**، الفرق

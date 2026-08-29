@@ -105,7 +105,43 @@ docker exec -it smc-mysql mysql -uroot -p
 ```
 then re-create the app user for the new IP (`CREATE USER 'smc_user'@'<new-ip>' ...` + grant), matching the DATABASE_URL in the Web App environment variables.
 
-## 7. The intake avatar
+## 7. Sign in with Google / Facebook
+
+Patients can register and sign in with **Google** or **Facebook** instead of
+creating a username and password. Each button only appears once its keys are
+set, so nothing can dead-end.
+
+**To enable — hPanel → Web App → Environment variables, then restart:**
+
+| Variable | Where to get it |
+|---|---|
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | console.cloud.google.com → APIs & Services → Credentials → OAuth client ID → **Web application** |
+| `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET` | developers.facebook.com → your app → Facebook Login → Settings |
+
+**You must whitelist the redirect URLs, or the provider refuses the login:**
+
+```
+https://smartmedcon.com/api/auth/google/callback
+https://smartmedcon.com/api/auth/facebook/callback
+```
+
+Google calls this "Authorised redirect URIs"; Facebook calls it "Valid OAuth
+Redirect URIs". They must match exactly, including `https`.
+
+### How accounts are matched
+
+- Signing in with the same Google/Facebook account always returns to the same
+  patient record.
+- If a patient **already registered with a password** and later uses Google with
+  that same address, they land in their **existing** record — not a duplicate —
+  and their password still works.
+- This only happens when the provider confirms the address. An unconfirmed
+  address is never linked, because that would let someone reach a medical record
+  by asserting an address they do not own.
+- Facebook accounts created with a phone number give us no email; those patients
+  get a new record and should use the same button each time.
+
+## 8. The intake avatar
 
 The intake page (`/consultation/<id>/avatar`) runs the AI doctor that takes the
 patient's history. It has two possible faces — **the medical questioning is
