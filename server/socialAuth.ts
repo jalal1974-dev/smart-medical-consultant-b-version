@@ -189,7 +189,16 @@ export function registerSocialAuthRoutes(app: Express) {
         user = await db.getUserByEmail(profile.email);
       }
 
-      const openId = user ? user.openId : googleOpenId;
+      // Defensive: if the existing-account lookup ever returns a row without a
+      // usable openId, fall back to the Google identity rather than creating a
+      // broken session. Signing in must never depend on one field mapping.
+      const matchedOpenId = typeof user?.openId === "string" && user.openId.length > 0
+        ? user.openId
+        : null;
+      if (user && !matchedOpenId) {
+        console.error("[googleAuth] matched an account by email but it had no openId — falling back to the Google identity");
+      }
+      const openId = matchedOpenId ?? googleOpenId;
       const displayName = (user?.name || profile.name || "User") as string;
 
       await db.upsertUser({

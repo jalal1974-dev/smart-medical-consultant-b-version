@@ -1275,23 +1275,39 @@ export async function getUserByEmail(email: string) {
   const rows = Array.isArray(result[0]) ? result[0] : result;
   if (!rows || rows.length === 0) return undefined;
   const row = rows[0];
+
+  // This is a `SELECT *`, so the keys are the real MySQL column names. Several
+  // of those are camelCase (openId, loginMethod, hasUsedFreeConsultation, the
+  // timestamps) while others are snake_case (password_hash, consultations_
+  // remaining). Reading the wrong casing silently yields undefined rather than
+  // an error — that is how `openId` came back undefined here and broke Google
+  // sign-in for anyone whose email already had an account. Check both spellings
+  // so this cannot depend on a column ever being renamed.
+  const pick = <T>(...keys: string[]): T | undefined => {
+    for (const k of keys) {
+      const v = (row as Record<string, unknown>)[k];
+      if (v !== undefined && v !== null) return v as T;
+    }
+    return undefined;
+  };
+
   return {
     id: row.id as number,
-    openId: row.open_id as string,
-    name: row.name as string | null,
-    email: row.email as string | null,
-    username: row.username as string | null,
-    passwordHash: row.password_hash as string | null,
-    loginMethod: row.login_method as string | null,
+    openId: pick<string>("openId", "open_id") as string,
+    name: (pick<string>("name") ?? null) as string | null,
+    email: (pick<string>("email") ?? null) as string | null,
+    username: (pick<string>("username") ?? null) as string | null,
+    passwordHash: (pick<string>("password_hash", "passwordHash") ?? null) as string | null,
+    loginMethod: (pick<string>("loginMethod", "login_method") ?? null) as string | null,
     role: row.role as 'user' | 'admin',
-    consultationsRemaining: row.consultations_remaining as number,
-    hasUsedFreeConsultation: Boolean(row.has_used_free_consultation),
-    subscriptionType: row.subscription_type as string,
-    freeConsultationsUsed: (row.free_consultations_used as number) ?? 0,
-    freeConsultationsTotal: (row.free_consultations_total as number) ?? 1,
-    createdAt: row.created_at as Date,
-    updatedAt: row.updated_at as Date,
-    lastSignedIn: row.last_signed_in as Date,
+    consultationsRemaining: pick<number>("consultations_remaining", "consultationsRemaining") as number,
+    hasUsedFreeConsultation: Boolean(pick("hasUsedFreeConsultation", "has_used_free_consultation")),
+    subscriptionType: pick<string>("subscription_type", "subscriptionType") as string,
+    freeConsultationsUsed: pick<number>("free_consultations_used", "freeConsultationsUsed") ?? 0,
+    freeConsultationsTotal: pick<number>("free_consultations_total", "freeConsultationsTotal") ?? 1,
+    createdAt: pick<Date>("createdAt", "created_at") as Date,
+    updatedAt: pick<Date>("updatedAt", "updated_at") as Date,
+    lastSignedIn: pick<Date>("lastSignedIn", "last_signed_in") as Date,
   };
 }
 
