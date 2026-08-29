@@ -105,41 +105,47 @@ docker exec -it smc-mysql mysql -uroot -p
 ```
 then re-create the app user for the new IP (`CREATE USER 'smc_user'@'<new-ip>' ...` + grant), matching the DATABASE_URL in the Web App environment variables.
 
-## 7. Sign in with Google / Facebook
+## 7. Sign in with Google
 
-Patients can register and sign in with **Google** or **Facebook** instead of
-creating a username and password. Each button only appears once its keys are
+Patients can register and sign in with their **Gmail / Google account** instead
+of creating a username and password. The button appears only once the keys are
 set, so nothing can dead-end.
 
-**To enable — hPanel → Web App → Environment variables, then restart:**
+**Step 1 — create the credentials** at
+[console.cloud.google.com](https://console.cloud.google.com):
 
-| Variable | Where to get it |
-|---|---|
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | console.cloud.google.com → APIs & Services → Credentials → OAuth client ID → **Web application** |
-| `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET` | developers.facebook.com → your app → Facebook Login → Settings |
+1. **APIs & Services → OAuth consent screen** → External → fill app name,
+   support email, and your domain. (Publish it, or only test users can sign in.)
+2. **APIs & Services → Credentials → Create credentials → OAuth client ID**
+   → Application type: **Web application**.
+3. Under **Authorised redirect URIs** add this exactly:
+   ```
+   https://smartmedcon.com/api/auth/google/callback
+   ```
+   A mismatch here is the usual reason Google refuses the login — it must be
+   `https`, no trailing slash, exactly this path.
+4. Copy the **Client ID** and **Client secret**.
 
-**You must whitelist the redirect URLs, or the provider refuses the login:**
+**Step 2 — hPanel → Web App → Environment variables**, then restart:
 
 ```
-https://smartmedcon.com/api/auth/google/callback
-https://smartmedcon.com/api/auth/facebook/callback
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
 ```
 
-Google calls this "Authorised redirect URIs"; Facebook calls it "Valid OAuth
-Redirect URIs". They must match exactly, including `https`.
+To turn it off again, delete those two variables and restart — the button
+disappears and username/password login continues unchanged.
 
 ### How accounts are matched
 
-- Signing in with the same Google/Facebook account always returns to the same
-  patient record.
-- If a patient **already registered with a password** and later uses Google with
-  that same address, they land in their **existing** record — not a duplicate —
-  and their password still works.
-- This only happens when the provider confirms the address. An unconfirmed
+- Signing in with the same Google account always returns to the same patient
+  record.
+- If a patient **already registered with a password** and later signs in with
+  Google using that same address, they land in their **existing** record — not a
+  duplicate — and their password still works.
+- This only happens when Google confirms the address is verified. An unverified
   address is never linked, because that would let someone reach a medical record
   by asserting an address they do not own.
-- Facebook accounts created with a phone number give us no email; those patients
-  get a new record and should use the same button each time.
 
 ## 8. The intake avatar
 

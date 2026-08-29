@@ -105,38 +105,43 @@ docker exec -it smc-mysql mysql -uroot -p
 ```
 ثم أعد إنشاء مستخدم التطبيق بالعنوان الجديد (`CREATE USER 'smc_user'@'<new-ip>' ...` مع الصلاحيات) بما يطابق DATABASE_URL في متغيرات بيئة الـ Web App.
 
-## ٧. الدخول عبر Google / Facebook
+## ٧. الدخول عبر Google
 
-يستطيع المريض التسجيل والدخول عبر **Google** أو **Facebook** بدل إنشاء اسم
-مستخدم وكلمة مرور. ولا يظهر أي زر إلا بعد ضبط مفاتيحه، فلا يصل المريض إلى طريق
-مسدود.
+يستطيع المريض التسجيل والدخول بحساب **Gmail / Google** بدل إنشاء اسم مستخدم
+وكلمة مرور. ولا يظهر الزر إلا بعد ضبط المفاتيح، فلا يصل المريض إلى طريق مسدود.
 
-**للتفعيل — hPanel ← Web App ← متغيرات البيئة، ثم أعد التشغيل:**
+**الخطوة ١ — أنشئ بيانات الاعتماد** من
+[console.cloud.google.com](https://console.cloud.google.com):
 
-| المتغيّر | من أين تحصل عليه |
-|---|---|
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | console.cloud.google.com ← APIs & Services ← Credentials ← OAuth client ID ← **Web application** |
-| `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET` | developers.facebook.com ← تطبيقك ← Facebook Login ← Settings |
+1. **APIs & Services ← OAuth consent screen** ← External ← اكتب اسم التطبيق
+   وبريد الدعم والنطاق. (انشره، وإلا لن يدخل سوى المستخدمين التجريبيين.)
+2. **APIs & Services ← Credentials ← Create credentials ← OAuth client ID**
+   ← نوع التطبيق: **Web application**.
+3. تحت **Authorised redirect URIs** أضف هذا الرابط حرفياً:
+   ```
+   https://smartmedcon.com/api/auth/google/callback
+   ```
+   وعدم تطابقه هو السبب الأشهر لرفض Google تسجيل الدخول — يجب أن يكون `https`
+   وبلا شرطة مائلة في النهاية وبنفس المسار تماماً.
+4. انسخ **Client ID** و **Client secret**.
 
-**يجب إضافة روابط العودة في لوحة المزوّد، وإلا رفض تسجيل الدخول:**
+**الخطوة ٢ — hPanel ← Web App ← متغيرات البيئة**، ثم أعد التشغيل:
 
 ```
-https://smartmedcon.com/api/auth/google/callback
-https://smartmedcon.com/api/auth/facebook/callback
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
 ```
 
-تسمّيها Google «Authorised redirect URIs»، ويسمّيها Facebook «Valid OAuth
-Redirect URIs». ويجب أن تتطابق حرفياً مع `https`.
+وللإيقاف لاحقاً احذف المتغيّرين وأعد التشغيل — يختفي الزر ويبقى الدخول باسم
+المستخدم وكلمة المرور كما هو.
 
 ### كيف تُربط الحسابات
 
-- الدخول بنفس حساب Google/Facebook يعود دائماً إلى نفس ملف المريض.
-- إذا كان المريض **مسجّلاً سابقاً بكلمة مرور** ثم استخدم Google بنفس البريد،
+- الدخول بنفس حساب Google يعود دائماً إلى نفس ملف المريض.
+- إذا كان المريض **مسجّلاً سابقاً بكلمة مرور** ثم دخل عبر Google بنفس البريد،
   فسيدخل إلى **ملفه الحالي** لا إلى ملف مكرّر، وتبقى كلمة مروره تعمل.
-- ويحدث ذلك فقط عندما يؤكّد المزوّد ملكية البريد. أما البريد غير المؤكّد فلا
+- ويحدث ذلك فقط عندما تؤكّد Google أن البريد موثّق. أما البريد غير الموثّق فلا
   يُربط أبداً، لأن ذلك يتيح لشخص الوصول إلى ملف طبي بادعاء بريد لا يملكه.
-- حسابات Facebook المُنشأة برقم هاتف لا تعطينا بريداً؛ يحصل أصحابها على ملف
-  جديد، ويُفضّل أن يستخدموا نفس الزر في كل مرة.
 
 ## ٨. أفاتار المقابلة
 

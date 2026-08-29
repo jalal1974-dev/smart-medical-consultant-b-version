@@ -36,7 +36,7 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
-  // Google / Facebook sign-in under /api/auth/:provider
+  // Sign in with Google under /api/auth/google
   registerSocialAuthRoutes(app);
   // tRPC API
   app.use(
