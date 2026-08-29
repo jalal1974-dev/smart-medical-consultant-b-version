@@ -62,6 +62,7 @@ interface SpeechRecognitionCompat extends EventTarget {
   interimResults: boolean;
   maxAlternatives: number;
   onstart: ((this: SpeechRecognitionCompat, ev: Event) => void) | null;
+  onspeechstart: ((this: SpeechRecognitionCompat, ev: Event) => void) | null;
   onresult: ((this: SpeechRecognitionCompat, ev: SpeechRecognitionEventCompat) => void) | null;
   onerror: ((this: SpeechRecognitionCompat, ev: SpeechRecognitionErrorEventCompat) => void) | null;
   onend: ((this: SpeechRecognitionCompat, ev: Event) => void) | null;
@@ -124,6 +125,7 @@ const LANG_LOCALE: Record<VoiceLang, string> = {
   ar: "ar-SA",
 };
 
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 export function useVoiceChat(options: UseVoiceChatOptions = {}): UseVoiceChatReturn {
   const { initialLanguage = "en", onTranscript, onLanguageChange } = options;
@@ -152,6 +154,9 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}): UseVoiceChatRet
 
   // ── Refs ───────────────────────────────────────────────────────────────────
   const recognitionRef = useRef<SpeechRecognitionCompat | null>(null);
+  // True while the patient wants to keep recording. Used to restart the browser
+  // session, which ends on its own after roughly a minute or after a pause.
+  const shouldListenRef = useRef(false);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const langRef = useRef<VoiceLang>(detectedLanguage);
   const volumeRef = useRef(1);
@@ -199,10 +204,19 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}): UseVoiceChatRet
     const recognition = new SpeechRecognitionCtor();
 
     recognition.lang = LANG_LOCALE[langRef.current];
-    recognition.continuous = false;
+    // Continuous, because a patient describing a symptom pauses to think. With
+    // continuous=false the browser ends the turn at the first pause and the
+    // half-finished sentence is sent as their answer.
+    recognition.continuous = true;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
 
+    // Voice-note model: the microphone stays open until the patient stops it.
+    // Nothing is ever submitted automatically — each finished phrase is handed
+    // to the caller, which appends it to the message box so the patient can
+    // read it, correct it, and press Send when they are ready. Silence-based
+    // auto-send was cutting people off mid-sentence while they recalled dates
+    // and medicine names.
     recognition.onstart = () => {
       setIsListening(true);
       setInterimTranscript("");
@@ -210,44 +224,59 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}): UseVoiceChatRet
 
     recognition.onresult = (event: SpeechRecognitionEventCompat) => {
       let interim = "";
-      let final = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const transcript = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
-          final += transcript;
+          const finalText = transcript.trim();
+          if (finalText) {
+            detectLanguageFromText(finalText);
+            onTranscript?.(finalText);
+          }
         } else {
           interim += transcript;
         }
       }
       setInterimTranscript(interim);
-      if (final) {
-        setInterimTranscript("");
-        detectLanguageFromText(final);
-        onTranscript?.(final);
-      }
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEventCompat) => {
-      // Ignore "no-speech" — user just didn't speak
-      if (event.error !== "no-speech") {
+      // "no-speech" just means they have not started yet; "aborted" is our own
+      // stop(). Neither should end the recording the patient asked for.
+      if (event.error !== "no-speech" && event.error !== "aborted") {
         console.warn("[STT] error:", event.error);
+        shouldListenRef.current = false;
+        setIsListening(false);
       }
-      setIsListening(false);
       setInterimTranscript("");
     };
 
     recognition.onend = () => {
-      setIsListening(false);
       setInterimTranscript("");
+      // Chrome ends a recognition session on its own every minute or so, and
+      // after any pause. While the patient still has recording switched on,
+      // restart it so their microphone genuinely stays open.
+      if (shouldListenRef.current) {
+        try {
+          recognition.start();
+          return;
+        } catch {
+          /* fall through to stopping if the browser refuses to restart */
+        }
+      }
+      setIsListening(false);
     };
 
+    shouldListenRef.current = true;
     recognitionRef.current = recognition;
     recognition.start();
   }, [isSTTSupported, isListening, detectLanguageFromText, onTranscript]);
 
   // ── STT: stop listening ────────────────────────────────────────────────────
   const stopListening = useCallback(() => {
-    recognitionRef.current?.stop();
+    // Clear the flag first, so the auto-restart in `onend` does not reopen the
+    // microphone we are deliberately closing.
+    shouldListenRef.current = false;
+    try { recognitionRef.current?.stop(); } catch { /* not running */ }
     setIsListening(false);
     setInterimTranscript("");
   }, []);

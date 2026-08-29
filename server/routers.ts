@@ -3324,7 +3324,11 @@ Speak in clear, empathetic language. Avoid complex medical jargon unless you exp
           { role: 'user', content: input.message },
         ];
 
-        const response = await invokeLLM({ messages });
+        // Hard cap the reply length. A history-taking turn is one short
+        // acknowledgement plus one question; without a cap the model can answer
+        // a confusing turn by dumping every remaining question at once, which
+        // is overwhelming for a patient and useless as a history.
+        const response = await invokeLLM({ messages, maxTokens: 400 });
         const assistantMessage = response.choices[0]?.message?.content ?? (lang === 'ar' ? 'عذراً، حدث خطأ.' : 'Sorry, an error occurred.');
 
         // Update transcript

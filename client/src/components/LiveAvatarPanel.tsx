@@ -299,7 +299,12 @@ const LiveAvatarPanel = forwardRef<LiveAvatarHandle, Props>(function LiveAvatarP
 
   return (
     <div className="flex flex-col gap-2" dir={isRtl ? "rtl" : "ltr"}>
-      <div className="relative w-full aspect-video bg-gradient-to-br from-primary/10 to-primary/5 rounded-xl overflow-hidden border border-border">
+      {/* 16:9 while a video stream is playing, square otherwise: the clinic's
+          artwork is a square image, and cropping it to 16:9 pushed the doctor
+          to the edge and hid him behind the caption bar. */}
+      <div
+        className={`relative w-full ${showVideo ? "aspect-video" : "aspect-square"} bg-gradient-to-br from-primary/10 to-primary/5 rounded-xl overflow-hidden border border-border`}
+      >
         {/* Live video surface — kept mounted so `attach` always has a target */}
         <video
           ref={videoRef}

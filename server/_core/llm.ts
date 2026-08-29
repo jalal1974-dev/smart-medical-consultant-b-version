@@ -282,6 +282,8 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     output_schema,
     responseFormat,
     response_format,
+    maxTokens,
+    max_tokens,
   } = params;
 
   const payload: Record<string, unknown> = {
@@ -301,7 +303,11 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.tool_choice = normalizedToolChoice;
   }
 
-  payload.max_tokens = 32768;
+  // Honour a caller-supplied cap. This was previously hard-set to 32768, which
+  // silently ignored the `maxTokens` parameter — so callers that need short
+  // replies (the intake avatar must ask one question at a time) had no way to
+  // enforce it.
+  payload.max_tokens = maxTokens ?? max_tokens ?? 32768;
 
   const normalizedResponseFormat = normalizeResponseFormat({
     responseFormat,

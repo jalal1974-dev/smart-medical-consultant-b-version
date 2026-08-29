@@ -466,17 +466,18 @@ export default function MedicalAvatarSession() {
   const [voiceMissing, setVoiceMissing] = useState(false);
   // Hands-free: keep the microphone cycling so the patient can hold a spoken
   // conversation without touching the screen between turns.
-  const [handsFree, setHandsFree] = useState(false);
 
   // handleSend is defined further down; route speech through a ref so the voice
   // hook can call it without a declaration-order problem.
   const handleSendRef = useRef<(text?: string) => void>(() => {});
 
+  // Speech is written into the message box, never sent automatically. The
+  // patient reads it back, fixes anything the recogniser misheard — which
+  // matters for medicine names and dosages — and presses Send themselves.
   // Must be referentially stable: the hook rebuilds startListening whenever
-  // onTranscript changes, and an inline arrow would reset the hands-free timer
-  // on every render so the microphone would never reopen.
+  // onTranscript changes.
   const handleTranscript = useCallback((text: string) => {
-    handleSendRef.current(text);
+    setInput((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text));
   }, []);
 
   const voice = useVoiceChat({
@@ -537,9 +538,19 @@ export default function MedicalAvatarSession() {
       // Voice output: prefer the live video avatar. Only fall back to the
       // browser's speech synthesis when no live session is streaming —
       // otherwise the reply would be spoken twice, out of sync.
-      if (isMuted) return;
+      // The microphone is never reopened automatically — the patient presses it
+      // when they are ready to answer. That keeps recognition and speech from
+      // ever running at the same time.
+      const finishTurn = () => {
+        busyRef.current = false;
+        setIsSpeaking(false);
+      };
+
+      if (isMuted) { finishTurn(); return; }
+
       if (avatarRef.current?.isLive()) {
         avatarRef.current.speak(replyText);
+        finishTurn();
       } else if ("speechSynthesis" in window) {
         // Speak in the language the reply is actually written in. The model
         // mirrors the patient, so it can answer in Arabic even when the stored
@@ -554,12 +565,18 @@ export default function MedicalAvatarSession() {
         if (voice) utterance.voice = voice;
         utterance.rate = 0.9;
         utterance.onstart = () => setIsSpeaking(true);
-        utterance.onend = () => setIsSpeaking(false);
+        utterance.onend = finishTurn;
+        // If synthesis fails (missing voice, blocked audio) the turn must still
+        // end, otherwise the microphone would never reopen and the interview
+        // would appear frozen.
+        utterance.onerror = finishTurn;
         synthRef.current = utterance;
         window.speechSynthesis.speak(utterance);
 
         if (spokenLang !== language) setLanguage(spokenLang);
         setVoiceMissing(!hasVoiceFor(spokenLang));
+      } else {
+        finishTurn();
       }
     },
     onError: (err) => {
@@ -608,6 +625,11 @@ export default function MedicalAvatarSession() {
     (overrideText?: string) => {
       const text = overrideText ?? input.trim();
       if (!text || !consultationId || chatMutation.isPending) return;
+
+      // Close the microphone for the whole send → speak cycle. Set before any
+      // async work so the reopen path cannot race it.
+      busyRef.current = true;
+      voice.stopListening();
 
       // Follow the language the patient is actually writing in. Without this an
       // Arabic patient on an English-defaulted consultation gets Arabic text
@@ -661,36 +683,38 @@ export default function MedicalAvatarSession() {
     voice.setLanguage(language);
   }, [language, voice.setLanguage]);
 
-  // Never listen while the avatar is talking — the microphone would transcribe
-  // the avatar's own voice and send it back as if the patient had said it.
-  useEffect(() => {
-    if (isSpeaking && voice.isListening) voice.stopListening();
-  }, [isSpeaking, voice.isListening, voice.stopListening]);
-
-  // Hands-free turn-taking: once the avatar finishes speaking and the reply has
-  // landed, reopen the microphone for the patient's next answer.
-  useEffect(() => {
-    if (!handsFree || isMuted) return;
-    if (isSpeaking || chatMutation.isPending || voice.isListening) return;
-    const timer = setTimeout(() => {
-      if (handsFree && !isSpeaking && !chatMutation.isPending) voice.startListening();
-    }, 450); // brief gap so the patient hears the question end before the beep
-    return () => clearTimeout(timer);
-  }, [handsFree, isMuted, isSpeaking, chatMutation.isPending, voice.isListening, voice.startListening]);
+  // Turn-taking is sequenced explicitly rather than by watching state.
+  //
+  // The first version reopened the microphone from an effect once `isSpeaking`
+  // went false. But `isSpeaking` is driven by the speech utterance's `onstart`,
+  // which fires asynchronously — and late for Arabic voices. So the microphone
+  // could open while the avatar was still talking, transcribe the avatar's own
+  // voice, and submit it as the patient's answer. That fed nonsense to the
+  // model, which then dumped its remaining questions at once, while Chrome cut
+  // the speech short because recognition and synthesis were running together.
+  //
+  // `busyRef` is set synchronously the moment we send, and cleared only when
+  // the utterance genuinely finishes, so the two can never overlap.
+  const busyRef = useRef(false);
 
   // Leaving the page must release the microphone.
   useEffect(() => {
     return () => { voice.stopListening(); };
   }, []);
 
-  const toggleHandsFree = useCallback(() => {
-    setHandsFree((on) => {
-      const next = !on;
-      if (!next) voice.stopListening();
-      else if (!isSpeaking && !chatMutation.isPending) voice.startListening();
-      return next;
-    });
-  }, [voice, isSpeaking, chatMutation.isPending]);
+  /** Start / stop recording, like holding a voice note. */
+  const toggleRecording = useCallback(() => {
+    if (voice.isListening) {
+      voice.stopListening();
+      return;
+    }
+    // Silence any reply still playing, so the microphone cannot record the
+    // avatar's own voice and feed it back as the patient's answer.
+    window.speechSynthesis?.cancel();
+    setIsSpeaking(false);
+    voice.startListening();
+    inputRef.current?.focus();
+  }, [voice]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -970,7 +994,9 @@ export default function MedicalAvatarSession() {
                     </span>
                     <p className="text-xs text-foreground/80 flex-1 truncate" dir="auto">
                       {voice.interimTranscript ||
-                        (language === "ar" ? "أستمع إليك... تحدّث الآن" : "Listening… speak now")}
+                        (language === "ar"
+                          ? "التسجيل جارٍ… تحدّث بحرية، ثم اضغط إرسال"
+                          : "Recording… take your time, then press Send")}
                     </p>
                   </div>
                   <style>{`
@@ -986,20 +1012,18 @@ export default function MedicalAvatarSession() {
               <div className="p-4 border-t border-border flex gap-2">
                 {voice.isSTTSupported && (
                   <Button
-                    onClick={toggleHandsFree}
+                    onClick={toggleRecording}
                     disabled={chatMutation.isPending}
                     size="icon"
-                    variant={handsFree ? "default" : "outline"}
-                    className={`self-end flex-shrink-0 ${
-                      voice.isListening ? "ring-2 ring-primary ring-offset-1 animate-pulse" : ""
-                    }`}
+                    variant={voice.isListening ? "destructive" : "outline"}
+                    className={`self-end flex-shrink-0 ${voice.isListening ? "animate-pulse" : ""}`}
                     title={
-                      handsFree
-                        ? language === "ar" ? "إيقاف المحادثة الصوتية" : "Stop voice conversation"
+                      voice.isListening
+                        ? language === "ar" ? "إيقاف التسجيل" : "Stop recording"
                         : language === "ar" ? "تحدّث بصوتك" : "Speak instead of typing"
                     }
                   >
-                    {handsFree ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+                    {voice.isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                   </Button>
                 )}
                 <Textarea
@@ -1009,7 +1033,7 @@ export default function MedicalAvatarSession() {
                   onKeyDown={handleKeyDown}
                   placeholder={
                     voice.isListening
-                      ? language === "ar" ? "أستمع إليك..." : "Listening…"
+                      ? language === "ar" ? "التسجيل جارٍ… كلامك يظهر هنا" : "Recording… your words appear here"
                       : language === "ar"
                       ? "اكتب ردك، أو اضغط المايكروفون للتحدث..."
                       : "Type your response, or tap the microphone to speak…"
@@ -1033,13 +1057,13 @@ export default function MedicalAvatarSession() {
               </div>
 
               {/* Tell the patient voice input is available on first use */}
-              {voice.isSTTSupported && !handsFree && messages.length > 0 && (
+              {voice.isSTTSupported && !voice.isListening && messages.length > 0 && (
                 <div className="px-4 pb-3 -mt-1">
                   <p className="text-[11px] text-muted-foreground flex items-center gap-1">
                     <Mic className="w-3 h-3 flex-shrink-0" />
                     {language === "ar"
-                      ? "يمكنك التحدّث بدل الكتابة — اضغط زر المايكروفون."
-                      : "You can speak instead of typing — tap the microphone."}
+                      ? "يمكنك التحدّث بدل الكتابة — اضغط المايكروفون، تحدّث، ثم اضغط إرسال."
+                      : "You can speak instead of typing — tap the microphone, talk, then press Send."}
                   </p>
                 </div>
               )}
